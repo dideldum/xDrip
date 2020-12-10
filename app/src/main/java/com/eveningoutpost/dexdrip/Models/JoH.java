@@ -208,6 +208,20 @@ public class JoH {
         }
         return new String(hexChars);
     }
+    
+    // Convert a stream of bytes to a mac format (i.e: 12:34:AB:BC:DE:FC)
+    public static String bytesToHexMacFormat(byte[] bytes) {
+        if(bytes == null || bytes.length == 0) {
+            return "NoMac";
+        }
+        String str = bytesToHex(bytes);
+        String ret = new String();
+        for(int i = 0; i < str.length() ; i+=2) {
+            ret += str.substring(i, i+2);
+            ret +=":";
+        }
+        return ret.substring(0,ret.length()-1);
+    }
 
     public static byte[] tolerantHexStringToByteArray(String str) {
         return hexStringToByteArray(str.toUpperCase().replaceAll("[^A-F0-9]",""));
@@ -227,6 +241,11 @@ public class JoH {
             Log.e(TAG, "Exception processing hexString: " + e);
             return null;
         }
+    }
+
+    public static String macFormat(final String unformatted) {
+        if (unformatted == null) return null;
+        return unformatted.replaceAll("[^a-fA-F0-9]","").replaceAll("(.{2})", "$1:").substring(0,17);
     }
 
     public static <K, V extends Comparable<? super V>> SortedSet<Map.Entry<K, V>> mapSortedByValue(Map<K, V> map, boolean descending) {
@@ -1065,7 +1084,14 @@ public class JoH {
     }
 
     public static void startService(final Class c, final String... args) {
+        startService(c, null, args);
+    }
+
+    public static void startService(final Class c, final byte[] bytes, final String... args) {
         final Intent intent = new Intent(xdrip.getAppContext(), c);
+        if (bytes != null) {
+            intent.putExtra("bytes_payload", bytes);
+        }
         if (args.length % 2 == 1) {
             throw new RuntimeException("Odd number of args for JoH.startService");
         }
@@ -1452,6 +1478,24 @@ public class JoH {
         }
         return false;
     }
+
+    public static boolean createSpecialBond(final String thisTAG, final BluetoothDevice device){
+        try {
+            Log.e(thisTAG,"Attempting special bond");
+            Class[] argTypes = new Class[] { int.class };
+            final Method method = device.getClass().getMethod("createBond", argTypes);
+            if (method != null) {
+                return (Boolean) method.invoke(device, 2);
+            } else {
+                Log.e(thisTAG,"CANNOT FIND SPECIAL BOND METHOD!!");
+            }
+        }
+        catch (Exception e) {
+            Log.e(thisTAG, "An exception occured while creating special bond: "+e);
+        }
+        return false;
+    }
+
 
     public synchronized static void setBluetoothEnabled(Context context, boolean state) {
         try {

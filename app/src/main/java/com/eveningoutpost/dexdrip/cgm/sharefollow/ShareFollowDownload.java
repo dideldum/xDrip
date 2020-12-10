@@ -76,7 +76,7 @@ public class ShareFollowDownload extends RetrofitBase {
     private boolean loginAndGetData() {
         if (!session.sessionIdValid()) {
             if (JoH.tsl() > loginBlockedTill) {
-                extendWakeLock(30000);
+                extendWakeLock(30_000);
                 getService().getSessionId(new ShareAuthenticationBody(password, login))
                         .enqueue(new ShareFollowCallback<String>("Login", session, this::getData)
                                 .setOnFailure(this::handleLoginFailure));
@@ -107,7 +107,7 @@ public class ShareFollowDownload extends RetrofitBase {
         loginBackoff = 0; // reset backoff timer due to login success
         try {
             if (session.sessionId != null) {
-                extendWakeLock(30000);
+                extendWakeLock(30_000);
                 getService().getGlucoseRecords(getDataQueryParameters(session.sessionId))
                         .enqueue(new ShareFollowCallback<List<ShareGlucoseRecord>>("Get Share Data", session,
                                 this::backgroundProcessGlucoseResults).setOnFailure(this::handleGetDataFailure));
@@ -144,6 +144,7 @@ public class ShareFollowDownload extends RetrofitBase {
         if (session.results != null) {
             UserError.Log.d(TAG, "Success get data");
             EntryProcessor.processEntries(session.results, true);
+            ShareFollowService.updateBgReceiveDelay();
             session.results = null;
             msg(null); // clear any error msg
         } else {

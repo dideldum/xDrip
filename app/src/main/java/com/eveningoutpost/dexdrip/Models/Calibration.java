@@ -128,6 +128,25 @@ class LiParametersNonFixed extends SlopeParameters {
 
 }
 
+class Li2AppParameters extends SlopeParameters {
+    Li2AppParameters() {
+        LOW_SLOPE_1 = 1;
+        LOW_SLOPE_2 = 1;
+        HIGH_SLOPE_1 = 1;
+        HIGH_SLOPE_2 = 1;
+        DEFAULT_LOW_SLOPE_LOW = 1;
+        DEFAULT_LOW_SLOPE_HIGH = 1;
+        DEFAULT_SLOPE = 1;
+        DEFAULT_HIGH_SLOPE_HIGH = 1;
+        DEFAULT_HIGH_SLOPE_LOW = 1;
+    }
+
+    @Override
+    public double restrictIntercept(double intercept) {
+        return Math.min(Math.max(intercept, -40), 20);
+    }
+}
+
 class TestParameters extends SlopeParameters {
     TestParameters() {
         LOW_SLOPE_1 = 0.85; //0.95
@@ -507,6 +526,17 @@ public class Calibration extends Model {
                 .executeSingle();
     }
 
+    public static Double getConvertedBg(double bg) {
+        final String unit = Pref.getString("units", "mgdl");
+        if (unit.compareTo("mgdl") != 0) {
+            bg = bg * Constants.MMOLL_TO_MGDL;
+        }
+        if ((bg < 40) || (bg > 400)) {
+            return null;
+        }
+        return bg;
+    }
+
     // without timeoffset
     public static Calibration create(double bg, Context context) {
         return create(bg, 0, context);
@@ -523,15 +553,14 @@ public class Calibration extends Model {
         final String unit = prefs.getString("units", "mgdl");
         final boolean adjustPast = prefs.getBoolean("rewrite_history", true);
 
-        if (unit.compareTo("mgdl") != 0) {
-            bg = bg * Constants.MMOLL_TO_MGDL;
-        }
-
-        if ((bg < 40) || (bg > 400)) {
+        final Double result = getConvertedBg(bg);
+        if (result == null) {
             Log.wtf(TAG, "Invalid out of range calibration glucose mg/dl value of: " + bg);
             JoH.static_toast_long("Calibration out of range: " + bg + " mg/dl");
             return null;
         }
+
+        bg = result; // unbox result
 
         if (!note_only) CalibrationRequest.clearAll();
         final Calibration calibration = new Calibration();
@@ -679,7 +708,7 @@ public class Calibration extends Model {
                 final Calibration calibration = Calibration.last();
                 ActiveAndroid.clearCache();
                 calibration.slope = 1;
-                calibration.intercept = calibration.bg - (calibration.raw_value * calibration.slope);
+                calibration.intercept = sParams.restrictIntercept(calibration.bg - (calibration.raw_value * calibration.slope));
                 calibration.save();
                 CalibrationRequest.createOffset(calibration.bg, 25);
                 newFingerStickData();
@@ -707,7 +736,7 @@ public class Calibration extends Model {
                 double d = (l * n) - (m * m);
                 final Calibration calibration = Calibration.last();
                 ActiveAndroid.clearCache();
-                calibration.intercept = ((n * p) - (m * q)) / d;
+                calibration.intercept = sParams.restrictIntercept(((n * p) - (m * q)) / d);
                 calibration.slope = ((l * q) - (m * p)) / d;
                 Log.d(TAG, "Calibration slope debug: slope:" + calibration.slope + " q:" + q + " m:" + m + " p:" + p + " d:" + d);
                 if ((calibrations.size() == 2 && calibration.slope < sParams.getLowSlope1()) || (calibration.slope < sParams.getLowSlope2())) { // I have not seen a case where a value below 7.5 proved to be accurate but we should keep an eye on this
@@ -717,7 +746,7 @@ public class Calibration extends Model {
                     if (calibrations.size() > 2) {
                         calibration.possible_bad = true;
                     }
-                    calibration.intercept = calibration.bg - (calibration.estimate_raw_at_time_of_calibration * calibration.slope);
+                    calibration.intercept = sParams.restrictIntercept(calibration.bg - (calibration.estimate_raw_at_time_of_calibration * calibration.slope));
                     CalibrationRequest.createOffset(calibration.bg, 25);
                 }
                 if ((calibrations.size() == 2 && calibration.slope > sParams.getHighSlope1()) || (calibration.slope > sParams.getHighSlope2())) {
@@ -727,7 +756,7 @@ public class Calibration extends Model {
                     if (calibrations.size() > 2) {
                         calibration.possible_bad = true;
                     }
-                    calibration.intercept = calibration.bg - (calibration.estimate_raw_at_time_of_calibration * calibration.slope);
+                    calibration.intercept = sParams.restrictIntercept(calibration.bg - (calibration.estimate_raw_at_time_of_calibration * calibration.slope));
                     CalibrationRequest.createOffset(calibration.bg, 25);
                 }
                 Log.d(TAG, "Calculated Calibration Slope: " + calibration.slope);
@@ -776,6 +805,10 @@ public class Calibration extends Model {
 
     @NonNull
     private static SlopeParameters getSlopeParameters() {
+
+        if (CollectionServiceStarter.isLibre2App((Context)null)) {
+            return new Li2AppParameters();
+        }
 
         if (CollectionServiceStarter.isLimitter()) {
             if (Pref.getBooleanDefaultFalse("use_non_fixed_li_parameters")) {
@@ -1376,4 +1409,6 @@ abstract class SlopeParameters {
     public double getDefaulHighSlopeLow() {
         return DEFAULT_HIGH_SLOPE_LOW;
     }
+
+    public double restrictIntercept(double intercept) { return  intercept; }
 }
